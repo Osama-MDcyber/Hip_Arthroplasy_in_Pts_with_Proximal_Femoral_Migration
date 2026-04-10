@@ -1,0 +1,309 @@
+---
+title: "Total Hip Arthroplasty in Patients with Proximal Femoral Migration"
+author: "Osama Ahmed Ibrahim"
+output: word_document
+---
+```{r message=FALSE, warning=FALSE, include=FALSE}
+knitr::opts_chunk$set(
+  dpi = 300)
+```
+
+Statistical analysis:
+Statistical analyses were performed using R software. Continuous variables were expressed as mean ± standard deviation or median with interquartile range, depending on distribution. Categorical variables were presented as frequencies and percentages.
+Normality was assessed prior to analysis. Pre- and postoperative comparisons of paired continuous variables (limb length discrepancy and flexion deformity) were performed using the Wilcoxon signed-rank test. Repeated measures of Harris Hip Score across multiple time points were analyzed using one-way repeated-measures ANOVA, followed by post hoc pairwise comparisons with Bonferroni correction.
+Changes in categorical variables (pelvic obliquity) were assessed using McNemar’s test. A p-value < 0.05 was considered statistically significant.
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(gtsummary)
+library(broom)
+library(rstatix)
+library(flextable)
+library(patchwork)
+library(glue)
+library(ggsignif)
+library(ggdist)
+
+
+# Read Excel dataset containing arthroplasty outcomes
+Arthroplasty_Data <- read_excel(path = "Project 4 data.xlsx")
+
+# Rename key variables, create patient ID, and reorder columns
+Arthroplasty_Data <- Arthroplasty_Data %>%
+  rename(
+    Age = age,
+    Gender = gender,
+    Side = side,
+    Complications = complication
+  ) %>%
+  mutate(PatientID = row_number()) %>%
+  relocate(PatientID, .before = Age)
+
+# Recode gender variable into readable labels
+Arthroplasty_Data$Gender <- factor(Arthroplasty_Data$Gender) %>%
+  fct_recode("Male" = "1", "Female" = "2")
+
+# Recode surgical side variable into labels
+Arthroplasty_Data$Side <- factor(Arthroplasty_Data$Side) %>%
+  fct_recode("Right" = "1", "Left" = "2")
+
+# Standardize column names: replace "pre" with "Preoperative"
+Arthroplasty_Data <- Arthroplasty_Data %>%
+  rename_with(~ gsub("pre", "Preoperative", .x))
+
+# Rename specific outcome variables for consistency
+Arthroplasty_Data <- Arthroplasty_Data %>%
+  rename(
+    "Pelvic_Obliquity Postoperative" = `Pelvic obliquity  post`,
+    "Pelvic_Obliquity Preoperative" = `Pelvic obliquity Preoperative`,
+    "LLD Postoperative" = `LLD post`,
+    "FD Postoperative" = `FD post`
+  )
+
+```
+
+### Table 1. Baseline demographic and clinical characteristics of patients undergoing total hip arthroplasty 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Summary table for demographic and clinical variables
+Arthroplasty_Data %>%
+  select(Age, Gender, Side, Complications, `Acetabular reconstruction`) %>%
+  tbl_summary(
+    statistic = Age ~ "{mean} ± ({sd})"
+  ) %>%
+  bold_labels() %>%
+  as_flex_table()
+```
+
+
+Results:
+Baseline characteristics
+A total of 24 patients undergoing total hip arthroplasty for proximal femoral migration were included in the study. The mean age was 42 ± 13 years, indicating a relatively young cohort. Males represented 63% of the study population, while females accounted for 37%. The right hip was more frequently affected (54%) compared to the left (46%). Postoperative complications were uncommon, occurring in 4.2% of patients, while 8.3% required acetabular reconstruction due to bone loss or migration.
+
+
+### Table 2. Comparison of limb length discrepancy and flexion deformity before and after total hip arthroplasty 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Reshape data from wide to long format for repeated measures analysis
+Arthroplasty_Data %>%
+  select(starts_with("LLD"), starts_with("FD"), PatientID) %>%
+  pivot_longer(
+    cols = -PatientID,
+    names_to = c("Measure", "Time"),
+    names_sep = " ",
+    values_to = "Value"
+  ) %>%
+  mutate(Time = factor(Time, levels = c("Preoperative", "Postoperative"))) %>%
+  pivot_wider(names_from = Measure, values_from = Value) %>%
+  
+  # Summary table by time point
+  tbl_summary(
+    by = Time,
+    include = c(LLD, FD),
+    label = list(
+      LLD ~ "Limb Length Discrepancy",
+      FD ~ "Flexion Deformity"
+    )
+  ) %>%
+  
+  # Paired non-parametric test for repeated measures
+  add_p(
+    test = list(all_continuous() ~ "paired.wilcox.test"),
+    group = PatientID
+  ) %>%
+  add_ci() %>%
+  bold_labels() %>%
+  as_flex_table()
+
+```
+
+Limb length discrepancy and flexion deformity
+There was a statistically significant improvement in both limb length discrepancy and flexion deformity following surgery. Limb length discrepancy decreased from 2.75 (2.40–3.25) preoperatively to 0.45 (-0.30–0.70) postoperatively (p < 0.001). Similarly, flexion deformity improved significantly from 25° (15–30°) preoperatively to 5° (0–5°) postoperatively (p < 0.001), demonstrating effective correction of anatomical deformities after THA.
+
+### Table 3. Longitudinal changes in Harris Hip Score following total hip arthroplasty 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Rename time points for clarity
+Arthroplasty_Data_for_long <- Arthroplasty_Data %>%
+  rename(
+    "Preoperative" = `HHS Preoperative`,
+    "Post 6 weeks" = `HHS post 1 (6w)`,
+    "Post 6 months" = `HHS post 2 (6m)`,
+    "Post 1 year" = `HHS post 3 (1y)`
+  )
+
+# Convert dataset to long format for repeated measures analysis
+data_long <- Arthroplasty_Data_for_long %>%
+  select(PatientID, Preoperative, `Post 6 weeks`,
+         `Post 6 months`, `Post 1 year`) %>%
+  pivot_longer(
+    cols = c(Preoperative, `Post 6 weeks`,
+             `Post 6 months`, `Post 1 year`),
+    names_to = "TimePoint",
+    values_to = "HHS_Score"
+  ) %>%
+  mutate(
+    TimePoint = factor(TimePoint, levels = c(
+      "Preoperative", "Post 6 weeks",
+      "Post 6 months", "Post 1 year"
+    ))
+  )
+
+# Perform repeated measures ANOVA
+repeaetd_measures_anova <- data_long %>%
+  anova_test(
+    dv = HHS_Score,
+    wid = PatientID,
+    within = TimePoint
+  )
+
+# Extract ANOVA table
+table_repeated_anova <- get_anova_table(repeaetd_measures_anova)
+
+# Summary of HHS scores over time
+data_long %>%
+  tbl_summary(
+    by = TimePoint,
+    include = HHS_Score,
+    statistic = list(all_continuous() ~ "{mean} ± {sd}"),
+    label = list(HHS_Score ~ "HHS Score")
+  ) %>%
+  modify_header(label ~ "**Outcome**") %>%
+  modify_table_body(~ .x %>%
+                      mutate(p_value = style_pvalue(table_repeated_anova$p))) %>%
+  modify_header(p_value ~ "**p-value**") %>%
+  bold_labels() %>%
+  as_flex_table()
+```
+
+Functional outcomes (Harris Hip Score)
+The Harris Hip Score showed a significant and sustained improvement over time (p < 0.001). The mean score increased from 42 ± 6 preoperatively to 77 ± 3 at 6 weeks, 82 ± 3 at 6 months, and 88 ± 3 at 1 year postoperatively. The greatest improvement was observed in the early postoperative period, followed by continued but smaller gains over time, indicating progressive functional recovery.
+Functional outcomes (Harris Hip Score)
+Pairwise comparisons of Harris Hip Score demonstrated statistically significant differences between all time points (adjusted p < 0.001 for all comparisons). The most substantial improvement occurred between the preoperative period and 6 weeks postoperatively, while continued significant gains were observed between 6 weeks and 6 months, as well as between 6 months and 1 year.
+
+### Table 4. Pairwise comparisons of Harris Hip Score across follow-up time points 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Pairwise comparisons between time points
+posthoc_result <- data_long %>%
+  pairwise_t_test(
+    HHS_Score ~ TimePoint,
+    paired = TRUE,
+    p.adjust.method = "bonferroni"
+  )
+
+# Format post-hoc results into publication-ready table
+posthoc_result %>%
+  mutate(
+    HHS_Comparison = paste(group1, "vs", group2),
+    p.adj = gtsummary::style_pvalue(p.adj)
+  ) %>%
+  select(HHS_Comparison, p.adj) %>%
+  flextable() %>%
+  set_header_labels(
+    HHS_Comparison = "Harris Hip Score Pairwise Comparison",
+    p.adj = "Adjusted p-value"
+  ) %>%
+  theme_booktabs() %>%
+  bold(part = "header") %>%
+  autofit()
+
+```
+
+
+### Table 5. Changes in pelvic obliquity before and after total hip arthroplasty
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Prepare paired binary outcome for McNemar test
+pelvic_obl_long <- Arthroplasty_Data %>%
+  select(PatientID,
+         `Pelvic_Obliquity Preoperative`,
+         `Pelvic_Obliquity Postoperative`) %>%
+  rename(
+    Preoperative = `Pelvic_Obliquity Preoperative`,
+    Postoperative = `Pelvic_Obliquity Postoperative`
+  ) %>%
+  pivot_longer(
+    cols = c(Preoperative, Postoperative),
+    names_to = "Time",
+    values_to = "Pelvic Obliquity"
+  ) %>%
+  mutate(
+    `Pelvic Obliquity` = factor(
+      `Pelvic Obliquity`,
+      levels = c(0,1),
+      labels = c("No", "Yes")
+    )
+  )
+
+# Summary table + McNemar test for paired proportions
+pelvic_obl_long %>%
+  tbl_summary(
+    by = Time,
+    include = `Pelvic Obliquity`,
+    type = list(`Pelvic Obliquity` ~ "categorical")
+  ) %>%
+  add_p(
+    test = list(`Pelvic Obliquity` ~ "mcnemar.test"),
+    group = PatientID
+  ) %>%
+  bold_labels() %>%
+  as_flex_table()
+
+```
+
+Pelvic obliquity
+Pelvic obliquity improved significantly following surgery (p = 0.008). The proportion of patients without pelvic obliquity increased from 58% preoperatively to 96% postoperatively, while those with persistent pelvic obliquity decreased from 42% to 4.2%, indicating effective coronal plane realignment after THA.
+
+
+### Figure 1. Longitudinal changes in Harris Hip Score following total hip arthroplasty
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Spaghetti plot with mean trend and 95% CI
+ggplot(data_long, aes(x = TimePoint, y = HHS_Score, fill = TimePoint)) +
+  
+  # Individual patient trajectories
+  geom_line(
+    aes(group = PatientID),
+    alpha = 0.25,
+    linewidth = 0.6,
+    colour = "gray40"
+  ) +
+  
+  # Raw data points
+  geom_jitter(
+    alpha = 0.4,
+    color = "#2C7BB6",
+    size = 2,
+    width = 0.2
+  ) +
+  
+  # Mean trend line
+  stat_summary(
+    aes(group = 1),
+    fun = mean,
+    geom = "line",
+    linewidth = 1.3,
+    colour = "black"
+  ) +
+  
+  # 95% confidence interval
+  stat_summary(
+    fun.data = mean_cl_normal,
+    geom = "errorbar",
+    width = 0.15,
+    linewidth = 0.8,
+    colour = "black"
+  ) +
+  
+  labs(
+    x = "Time Point",
+    y = "Harris Hip Score"
+  ) +
+  
+  theme_classic(base_size = 14) +
+  theme(
+    legend.position = "none",
+    axis.text = element_text(color = "black")
+  )
+
+```
+Individual patient trajectories are shown in gray. The black line represents the mean Harris Hip Score over time. Error bars indicate 95% confidence intervals.
