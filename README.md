@@ -1,4 +1,4 @@
-# Outcomes of THA in Proximal Femoral Migration
+# Outcomes of Total Hip Arthroplasty in Proximal Femoral Migration
 
 R analysis and report for a longitudinal study evaluating the clinical and functional recovery of 24 patients 
 with proximal femoral migration undergoing total hip arthroplasty.
