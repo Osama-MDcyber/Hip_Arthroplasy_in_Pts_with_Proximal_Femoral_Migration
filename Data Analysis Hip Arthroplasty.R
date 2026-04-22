@@ -309,3 +309,4 @@ ggplot(data_long, aes(x = TimePoint, y = HHS_Score, fill = TimePoint)) +
     legend.position = "none",
     axis.text = element_text(color = "black")
   )
+
